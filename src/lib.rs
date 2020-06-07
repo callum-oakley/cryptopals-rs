@@ -1,8 +1,5 @@
 use core::ops;
-use std::fs::File;
-use std::io::prelude::*;
-use std::iter;
-use std::str;
+use std::{iter, str};
 
 use anyhow::Result;
 use openssl::symm::{decrypt, Cipher};
@@ -99,6 +96,33 @@ impl Bytes {
             }
         }
         count
+    }
+
+    pub fn find_best_single_byte_xor_key(&self) -> u8 {
+        (0..256)
+            .max_by_key(|&key| (self ^ &vec![key as u8].into()).letter_freq_score())
+            .unwrap() as u8
+    }
+
+    fn find_probable_keysize(&self, min: usize, max: usize) -> usize {
+        (min..max)
+            .min_by_key(|&keysize| {
+                // we need an integer key because f64 doesn't implement Ord, so multiply up so we don't
+                // lose too much precision in the cast
+                (1e6 * mean(self.blocks(keysize).windows(2).map(|window| match window {
+                    [a, b] => a.hamming_distance(b) as f64 / keysize as f64,
+                    _ => unreachable!(),
+                }))) as usize
+            })
+            .unwrap()
+    }
+
+    pub fn find_best_xor_key(&self, min_keysize: usize, max_keysize: usize) -> Bytes {
+        self.blocks(self.find_probable_keysize(min_keysize, max_keysize))
+            .transpose()
+            .iter()
+            .map(|block| block.find_best_single_byte_xor_key())
+            .collect()
     }
 }
 
@@ -234,52 +258,6 @@ impl iter::FromIterator<Bytes> for Blocks {
         }
         blocks
     }
-}
-
-pub fn find_best_single_byte_xor_key(text: &Bytes) -> u8 {
-    (0..256)
-        .max_by_key(|&key| (text ^ &vec![key as u8].into()).letter_freq_score())
-        .unwrap() as u8
-}
-
-pub fn decrypt_single_byte_xor(text: &Bytes) -> Bytes {
-    text ^ &vec![find_best_single_byte_xor_key(text)].into()
-}
-
-pub fn find_and_decrypt_single_byte_xor(path: &str) -> Result<Bytes> {
-    let mut file = File::open(path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    Ok(contents
-        .lines()
-        .map(|line| Bytes::from_hex(line))
-        .collect::<Result<Vec<_>>>()?
-        .iter()
-        .flat_map(|text| (0..256).map(move |key| text ^ &vec![key as u8].into()))
-        .max_by_key(|p| p.letter_freq_score())
-        .unwrap())
-}
-
-pub fn find_probable_keysize(text: &Bytes, min: usize, max: usize) -> usize {
-    (min..max)
-        .min_by_key(|&keysize| {
-            // we need an integer key because f64 doesn't implement Ord, so multiply up so we don't
-            // lose too much precision in the cast
-            (1e6 * mean(text.blocks(keysize).windows(2).map(|window| match window {
-                [a, b] => a.hamming_distance(b) as f64 / keysize as f64,
-                _ => unreachable!(),
-            }))) as usize
-        })
-        .unwrap()
-}
-
-pub fn find_best_xor_key(text: &Bytes, min_keysize: usize, max_keysize: usize) -> Bytes {
-    text.blocks(find_probable_keysize(text, min_keysize, max_keysize))
-        .transpose()
-        .iter()
-        .map(|block| find_best_single_byte_xor_key(block))
-        .collect()
 }
 
 fn mean(iter: impl Iterator<Item = f64>) -> f64 {
