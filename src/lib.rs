@@ -5,6 +5,7 @@ use std::iter;
 use std::str;
 
 use anyhow::Result;
+use openssl::symm::{decrypt, Cipher};
 
 // Taken from https://en.wikipedia.org/wiki/Letter_frequency
 const LETTERS_BY_FREQ: &[u8] = b" EARIOTNSLCUDPMHGBFYWKVXZJQ";
@@ -81,6 +82,23 @@ impl Bytes {
 
     pub fn blocks(&self, block_size: usize) -> Blocks {
         self.0.chunks(block_size).map(|c| c.into()).collect()
+    }
+
+    pub fn decrypt_aes_ecb(&self, key: &Bytes) -> Result<Self> {
+        Ok(decrypt(Cipher::aes_128_ecb(), key.as_ref(), None, self.as_ref())?.into())
+    }
+
+    pub fn count_repeating_blocks(&self, blocksize: usize) -> usize {
+        let mut count = 0;
+        let blocks = self.blocks(blocksize);
+        for i in 0..blocks.len() {
+            for j in 0..i {
+                if blocks[i] == blocks[j] {
+                    count += 1;
+                }
+            }
+        }
+        count
     }
 }
 
