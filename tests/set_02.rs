@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::prelude::*;
 use std::str;
 
 use anyhow::Result;
@@ -17,17 +15,12 @@ fn challenge_09() -> Result<()> {
 
 #[test]
 fn challenge_10() -> Result<()> {
-    let mut file = File::open("data/10.txt")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let ciphertext = base64::decode(&contents.lines().collect::<String>())?;
+    let ciphertext = base64::decode(include_str!("data/10.txt").lines().collect::<String>())?;
     let key = b"YELLOW SUBMARINE";
     let plaintext = decrypt_aes_cbc(&ciphertext, key, &[0; 16])?;
-    // TODO check against the whole text. What if the last line is wrong?!
     assert_eq!(
-        str::from_utf8(&plaintext)?.lines().next().unwrap(),
-        "I'm back and I'm ringin' the bell "
+        str::from_utf8(&plaintext)?,
+        include_str!("data/sample_plaintext.txt")
     );
 
     assert_eq!(

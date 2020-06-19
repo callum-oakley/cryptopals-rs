@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::prelude::*;
 use std::str;
 
 use anyhow::Result;
@@ -43,11 +41,7 @@ fn challenge_03() -> Result<()> {
 
 #[test]
 fn challenge_04() -> Result<()> {
-    let mut file = File::open("data/4.txt")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let text = contents
+    let text = include_str!("data/4.txt")
         .lines()
         .map(|line| decode_hex(line))
         .collect::<Result<Vec<_>>>()?
@@ -78,45 +72,30 @@ fn challenge_05() {
 fn challenge_06() -> Result<()> {
     assert_eq!(hamming_distance(b"this is a test", b"wokka wokka!!!"), 37);
 
-    let mut file = File::open("data/6.txt")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let text = base64::decode(&contents.lines().collect::<String>())?;
+    let text = base64::decode(include_str!("data/6.txt").lines().collect::<String>())?;
     let key = find_best_xor_key(&text, 2, 40);
     assert_eq!(str::from_utf8(&key)?, "Terminator X: Bring the noise",);
     assert_eq!(
-        str::from_utf8(&xor(&text, &key))?.lines().next().unwrap(),
-        "I'm back and I'm ringin' the bell ",
+        str::from_utf8(&xor(&text, &key))?,
+        include_str!("data/sample_plaintext.txt"),
     );
     Ok(())
 }
 
 #[test]
 fn challenge_07() -> Result<()> {
-    let mut file = File::open("data/7.txt")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let text = base64::decode(&contents.lines().collect::<String>())?;
+    let text = base64::decode(include_str!("data/7.txt").lines().collect::<String>())?;
 
     assert_eq!(
-        str::from_utf8(&decrypt_aes_ecb(&text, b"YELLOW SUBMARINE")?)?
-            .lines()
-            .next()
-            .unwrap(),
-        "I'm back and I'm ringin' the bell ",
+        str::from_utf8(&decrypt_aes_ecb(&text, b"YELLOW SUBMARINE")?)?,
+        include_str!("data/sample_plaintext.txt"),
     );
     Ok(())
 }
 
 #[test]
 fn challenge_08() -> Result<()> {
-    let mut file = File::open("data/8.txt")?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    let texts: Vec<Vec<u8>> = contents
+    let texts: Vec<Vec<u8>> = include_str!("data/8.txt")
         .lines()
         .map(|line| decode_hex(line))
         .collect::<Result<_>>()?;
