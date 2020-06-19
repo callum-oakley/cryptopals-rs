@@ -24,6 +24,7 @@ fn challenge_10() -> Result<()> {
     let ciphertext = base64::decode(&contents.lines().collect::<String>())?;
     let key = b"YELLOW SUBMARINE";
     let plaintext = decrypt_aes_cbc(&ciphertext, key, &[0; 16])?;
+    // TODO check against the whole text. What if the last line is wrong?!
     assert_eq!(
         str::from_utf8(&plaintext)?.lines().next().unwrap(),
         "I'm back and I'm ringin' the bell "
@@ -37,5 +38,21 @@ fn challenge_10() -> Result<()> {
         )?,
         b"hello world",
     );
+    Ok(())
+}
+
+#[test]
+fn challenge_11() -> Result<()> {
+    for _ in 0..100 {
+        // We can determine whether our oracle is using ECB or CBC by
+        // 1. providing enough plaintext of uniform 0s to ensure we've got at least 4 blocks after
+        //    padding
+        // 2. then the middle two blocks of plaintext are all 0, (and crucially, the same as one
+        //    another)
+        // 3. then ECB will encode them to the same ciphertext, but CBC will not (in general).
+        let (ciphertext, mode) = encryption_oracle(&vec![0; 64])?;
+        let blocks: Vec<_> = ciphertext.chunks(16).collect();
+        assert_eq!(blocks[1] == blocks[2], mode == Mode::ECB);
+    }
     Ok(())
 }

@@ -1,7 +1,8 @@
+use rand::distributions::{Standard, Uniform};
+use rand::prelude::*;
 use std::{iter, str};
 
 use anyhow::Result;
-use openssl::symm::{Cipher, Crypter, Mode};
 
 // Taken from https://en.wikipedia.org/wiki/Letter_frequency
 const LETTERS_BY_FREQ: &[u8] = b" EARIOTNSLCUDPMHGBFYWKVXZJQ";
@@ -126,9 +127,10 @@ pub fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-pub fn encrypt_aes_ecb(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Cipher::aes_128_ecb();
-    let mut encrypter = Crypter::new(cipher, Mode::Encrypt, key, None)?;
+fn encrypt_aes_block(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    let cipher = openssl::symm::Cipher::aes_128_ecb();
+    let mut encrypter =
+        openssl::symm::Crypter::new(cipher, openssl::symm::Mode::Encrypt, key, None)?;
     encrypter.pad(false);
     let mut ciphertext = vec![0; plaintext.len() + cipher.block_size()];
     let mut count = encrypter.update(plaintext, &mut ciphertext)?;
@@ -137,9 +139,10 @@ pub fn encrypt_aes_ecb(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     Ok(ciphertext)
 }
 
-pub fn decrypt_aes_ecb(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Cipher::aes_128_ecb();
-    let mut decrypter = Crypter::new(cipher, Mode::Decrypt, key, None)?;
+fn decrypt_aes_block(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    let cipher = openssl::symm::Cipher::aes_128_ecb();
+    let mut decrypter =
+        openssl::symm::Crypter::new(cipher, openssl::symm::Mode::Decrypt, key, None)?;
     decrypter.pad(false);
     let mut plaintext = vec![0; ciphertext.len() + cipher.block_size()];
     let mut count = decrypter.update(ciphertext, &mut plaintext)?;
@@ -148,13 +151,31 @@ pub fn decrypt_aes_ecb(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     Ok(plaintext)
 }
 
+pub fn encrypt_aes_ecb(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    let mut ciphertext = Vec::new();
+    let padded = pad(plaintext, plaintext.len() + 16 - plaintext.len() % 16);
+    for block in padded.chunks(16) {
+        ciphertext.extend(encrypt_aes_block(&block, key)?);
+    }
+    Ok(ciphertext)
+}
+
+pub fn decrypt_aes_ecb(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>> {
+    let mut plaintext = Vec::new();
+    for block in ciphertext.chunks(16) {
+        plaintext.extend(decrypt_aes_block(&block, key)?);
+    }
+    plaintext.truncate(plaintext.len() - *plaintext.last().unwrap() as usize);
+    Ok(plaintext)
+}
+
 pub fn encrypt_aes_cbc(plaintext: &[u8], key: &[u8], ic: &[u8]) -> Result<Vec<u8>> {
     let mut ciphertext = Vec::new();
     let mut last = ic.to_vec();
     let padded = pad(plaintext, plaintext.len() + 16 - plaintext.len() % 16);
     for block in padded.chunks(16) {
-        last = encrypt_aes_ecb(&xor(&last, &block), key)?;
-        ciphertext.extend(last.iter());
+        last = encrypt_aes_block(&xor(&last, &block), key)?;
+        ciphertext.extend(&last);
     }
     Ok(ciphertext)
 }
@@ -163,9 +184,60 @@ pub fn decrypt_aes_cbc(ciphertext: &[u8], key: &[u8], ic: &[u8]) -> Result<Vec<u
     let mut plaintext = Vec::new();
     let mut last = ic;
     for block in ciphertext.chunks(16) {
-        plaintext.extend(xor(&decrypt_aes_ecb(&block, key)?, &last).iter());
+        plaintext.extend(xor(&decrypt_aes_block(&block, key)?, &last));
         last = block;
     }
     plaintext.truncate(plaintext.len() - *plaintext.last().unwrap() as usize);
     Ok(plaintext)
+}
+
+pub fn random_bytes<R: Rng + ?Sized>(n: usize, rng: &mut R) -> Vec<u8> {
+    let mut bytes = vec![0; n];
+    for byte in bytes.iter_mut() {
+        *byte = rng.gen();
+    }
+    bytes
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Mode {
+    ECB,
+    CBC,
+}
+
+impl Distribution<Mode> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Mode {
+        if rng.gen() {
+            Mode::ECB
+        } else {
+            Mode::CBC
+        }
+    }
+}
+
+pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, Mode)> {
+    let mut rng = thread_rng();
+
+    let mut padded = Vec::new();
+    padded.extend(random_bytes(
+        Uniform::new_inclusive(5, 10).sample(&mut rng),
+        &mut rng,
+    ));
+    padded.extend(plaintext);
+    padded.extend(random_bytes(
+        Uniform::new_inclusive(5, 10).sample(&mut rng),
+        &mut rng,
+    ));
+
+    let mode = random();
+    let ciphertext = match mode {
+        Mode::ECB => encrypt_aes_ecb(&padded, &random_bytes(16, &mut rng))?,
+        Mode::CBC => encrypt_aes_cbc(
+            &padded,
+            &random_bytes(16, &mut rng),
+            &random_bytes(16, &mut rng),
+        )?,
+    };
+
+    Ok((ciphertext, mode))
 }
