@@ -7,6 +7,22 @@ use anyhow::Result;
 // Taken from https://en.wikipedia.org/wiki/Letter_frequency
 const LETTERS_BY_FREQ: &[u8] = b" EARIOTNSLCUDPMHGBFYWKVXZJQ";
 
+// TODO This is probably the worst possible implementation...
+#[macro_export]
+macro_rules! concat_bytes {
+    ($x:expr $(,)?) => ({
+        let mut z: Vec<u8> = Vec::new();
+        z.extend($x);
+        z
+    });
+    ($x:expr, $($y:expr),+ $(,)?) => ({
+        let mut z: Vec<u8> = Vec::new();
+        z.extend($x);
+        z.extend(concat_bytes!($($y),+));
+        z
+    })
+}
+
 pub fn decode_hex(hex: &str) -> Result<Vec<u8>> {
     Ok(hex
         .as_bytes()
@@ -218,16 +234,11 @@ impl Distribution<Mode> for Standard {
 pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, Mode)> {
     let mut rng = thread_rng();
 
-    let mut padded = Vec::new();
-    padded.extend(random_bytes(
-        Uniform::new_inclusive(5, 10).sample(&mut rng),
-        &mut rng,
-    ));
-    padded.extend(plaintext);
-    padded.extend(random_bytes(
-        Uniform::new_inclusive(5, 10).sample(&mut rng),
-        &mut rng,
-    ));
+    let padded = concat_bytes!(
+        random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
+        plaintext,
+        random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
+    );
 
     let mode = random();
     let ciphertext = match mode {
