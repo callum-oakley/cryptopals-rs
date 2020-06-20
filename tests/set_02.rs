@@ -1,3 +1,4 @@
+use rand::distributions::Uniform;
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::str;
@@ -38,6 +39,28 @@ fn challenge_10() -> Result<()> {
 
 #[test]
 fn challenge_11() -> Result<()> {
+    let mut rng = thread_rng();
+
+    let mut oracle = |plaintext: &[u8]| -> Result<(Vec<u8>, bool)> {
+        let padded = concat_bytes!(
+            random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
+            plaintext,
+            random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
+        );
+
+        let ecb = random();
+        let ciphertext = match ecb {
+            true => encrypt_aes_ecb(&padded, &random_bytes(16, &mut rng))?,
+            false => encrypt_aes_cbc(
+                &padded,
+                &random_bytes(16, &mut rng),
+                &random_bytes(16, &mut rng),
+            )?,
+        };
+
+        Ok((ciphertext, ecb))
+    };
+
     for _ in 0..100 {
         // We can determine whether our oracle is using ECB or CBC by
         // 1. providing enough plaintext of uniform 0s to ensure we've got at least 4 blocks after
@@ -45,9 +68,9 @@ fn challenge_11() -> Result<()> {
         // 2. then the middle two blocks of plaintext are all 0, (and crucially, the same as one
         //    another)
         // 3. then ECB will encode them to the same ciphertext, but CBC will not (in general).
-        let (ciphertext, mode) = encryption_oracle(&[0; 64])?;
-        let blocks: Vec<_> = ciphertext.chunks(16).collect();
-        assert_eq!(blocks[1] == blocks[2], mode == Mode::ECB);
+        let (ciphertext, ecb) = oracle(&[0; 64])?;
+        let mut blocks = ciphertext.chunks(16).skip(1);
+        assert_eq!(blocks.next() == blocks.next(), ecb);
     }
     Ok(())
 }

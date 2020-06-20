@@ -1,4 +1,3 @@
-use rand::distributions::{Standard, Uniform};
 use rand::prelude::*;
 use std::{iter, str};
 
@@ -213,42 +212,4 @@ pub fn random_bytes<R: Rng + ?Sized>(n: usize, rng: &mut R) -> Vec<u8> {
         *byte = rng.gen();
     }
     bytes
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Mode {
-    ECB,
-    CBC,
-}
-
-impl Distribution<Mode> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Mode {
-        if rng.gen() {
-            Mode::ECB
-        } else {
-            Mode::CBC
-        }
-    }
-}
-
-pub fn encryption_oracle(plaintext: &[u8]) -> Result<(Vec<u8>, Mode)> {
-    let mut rng = thread_rng();
-
-    let padded = concat_bytes!(
-        random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
-        plaintext,
-        random_bytes(Uniform::new_inclusive(5, 10).sample(&mut rng), &mut rng),
-    );
-
-    let mode = random();
-    let ciphertext = match mode {
-        Mode::ECB => encrypt_aes_ecb(&padded, &random_bytes(16, &mut rng))?,
-        Mode::CBC => encrypt_aes_cbc(
-            &padded,
-            &random_bytes(16, &mut rng),
-            &random_bytes(16, &mut rng),
-        )?,
-    };
-
-    Ok((ciphertext, mode))
 }
