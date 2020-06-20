@@ -134,3 +134,19 @@ fn challenge_12() -> Result<()> {
     assert_eq!(plaintext, unknown);
     Ok(())
 }
+
+#[test]
+fn challenge_13() -> Result<()> {
+    let sample_pairs = vec![
+        ("foo".to_string(), "bar".to_string()),
+        ("baz".to_string(), "qux".to_string()),
+        ("zap".to_string(), "zazzle".to_string()),
+    ];
+    let encoded_sample_pairs = "foo=bar&baz=qux&zap=zazzle";
+    assert_eq!(decode_form_urlencoded(encoded_sample_pairs)?, sample_pairs);
+    assert_eq!(encode_form_urlencoded(&sample_pairs)?, encoded_sample_pairs);
+
+    let dodgy_pairs = vec![("email".to_string(), "foo@bar.com&role=admin".to_string())];
+    assert!(encode_form_urlencoded(&dodgy_pairs).is_err());
+    Ok(())
+}

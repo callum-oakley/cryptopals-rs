@@ -1,7 +1,7 @@
 use rand::prelude::*;
 use std::{iter, str};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 // Taken from https://en.wikipedia.org/wiki/Letter_frequency
 const LETTERS_BY_FREQ: &[u8] = b" EARIOTNSLCUDPMHGBFYWKVXZJQ";
@@ -212,4 +212,32 @@ pub fn random_bytes<R: Rng + ?Sized>(n: usize, rng: &mut R) -> Vec<u8> {
         *byte = rng.gen();
     }
     bytes
+}
+
+pub fn encode_form_urlencoded(pairs: &[(String, String)]) -> Result<String> {
+    Ok(pairs
+        .iter()
+        .map(|(k, v)| {
+            if k.contains("=") || k.contains("&") {
+                Err(anyhow!("invalid key {}", k))
+            } else if v.contains("=") || v.contains("&") {
+                Err(anyhow!("invalid value {}", v))
+            } else {
+                Ok(format!("{}={}", k, v))
+            }
+        })
+        .collect::<Result<Vec<_>>>()?
+        .join("&"))
+}
+
+pub fn decode_form_urlencoded(s: &str) -> Result<Vec<(String, String)>> {
+    s.split("&")
+        .map(|pair| {
+            let kv: Vec<_> = pair.split("=").collect();
+            match kv.len() {
+                2 => Ok((kv[0].to_string(), kv[1].to_string())),
+                _ => Err(anyhow!("malformed pair {}", pair)),
+            }
+        })
+        .collect()
 }
